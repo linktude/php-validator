@@ -364,9 +364,9 @@ class BulkValidationResult {
       return $this->_errors[$field][0] ?? null;
     }
 
-    foreach ($this->_errors as $messages) {
+    foreach ($this->_errors as $f => $messages) {
       if (!empty($messages)) {
-        return $messages[0];
+        return "'{$f}': {$messages[0]}";
       }
     }
     return null;
@@ -377,8 +377,10 @@ class BulkValidationResult {
    */
   public function messages():array {
     $messages = [];
-    foreach ($this->_errors as $errs) {
-      $messages = \array_merge($messages, $errs);
+    foreach ($this->_errors as $field => $errs) {
+      foreach ($errs as $msg) {
+        $messages[] = "'{$field}': {$msg}";
+      }
     }
     return $messages;
   }

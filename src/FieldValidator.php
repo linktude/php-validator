@@ -77,7 +77,7 @@ class FieldValidator {
     $this->_rules[] = [
       'rule' => function ($value) {
         if ($value === null || $value === '' || $value === []) {
-          return [false, null, 'This field is required.'];
+          return [false, null, "The '{$this->_field}' field is required."];
         }
         return [true, $value, null];
       },

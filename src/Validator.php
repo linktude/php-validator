@@ -277,7 +277,13 @@ class Validator {
     };
 
     if ($method && \method_exists($validator, $method)) {
-      $validator->$method(...$params);
+      // 'in' / 'notIn' receive their comma-split values as individual $params entries,
+      // but the method signature is in(array $options) — wrap them into one array.
+      if (\in_array($name, ['in', 'not_in', 'notIn', 'option'], true)) {
+        $validator->$method($params);
+      } else {
+        $validator->$method(...$params);
+      }
     }
   }
 }

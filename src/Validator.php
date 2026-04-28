@@ -116,20 +116,8 @@ class Validator {
       // Parse rules
       $parsedRules = $this->_parseRules($rules);
 
-      // Check if the field is required and whether a value was actually submitted
-      $isRequired = \in_array('required', \array_column($parsedRules, 'name'), true);
+      // Check if nullable
       $isNullable = \in_array('nullable', \array_column($parsedRules, 'name'), true);
-      $isAbsent   = ($value === null || $value === '' || $value === []);
-
-      // If the field is not required and was not submitted, skip all validation.
-      // Record the raw value (null / empty) without error and move on.
-      if (!$isRequired && $isAbsent) {
-        $this->_validated[$field] = $value;
-        continue;
-      }
-
-      $fieldValidator = new FieldValidator($field, $value);
-
       if ($isNullable) {
         $fieldValidator->nullable();
       }
@@ -205,25 +193,15 @@ class Validator {
 
         if (\str_contains($rule, ':')) {
           [$name, $paramStr] = \explode(':', $rule, 2);
-          $name = \trim($name);
-          // Rules whose param looks like a regex literal (starts with a delimiter
-          // such as /, ~, #, !, @) must NOT be comma-split — commas can appear
-          // legitimately inside the pattern (e.g. {2,28}).
-          $firstChar = \substr(\trim($paramStr), 0, 1);
-          $isRegexParam = \in_array($firstChar, ['/', '~', '#', '!', '@'], true);
-          if ($isRegexParam) {
-            $params = [\trim($paramStr)];
-          } else {
-            $params = \explode(',', $paramStr);
-            // Convert numeric strings to numbers
-            $params = \array_map(function ($p) {
-              $p = \trim($p);
-              if (\is_numeric($p)) {
-                return \str_contains($p, '.') ? (float)$p : (int)$p;
-              }
-              return $p;
-            }, $params);
-          }
+          $params = \explode(',', $paramStr);
+          // Convert numeric strings to numbers
+          $params = \array_map(function ($p) {
+            $p = \trim($p);
+            if (\is_numeric($p)) {
+              return \str_contains($p, '.') ? (float)$p : (int)$p;
+            }
+            return $p;
+          }, $params);
         } else {
           $name = $rule;
           $params = [];

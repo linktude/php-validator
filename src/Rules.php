@@ -489,6 +489,10 @@ class Rules {
 
   /**
    * Validate against regex pattern.
+   *
+   * Accepts PCRE patterns (e.g. /^[a-z]+$/i).
+   * JS-only flags (g, y) are silently stripped before evaluation —
+   * they have no PCRE equivalent and are commonly pasted from JS regex testers.
    */
   public static function pattern(mixed $value, string $regex):array {
     if (!\is_string($value)) {
@@ -497,12 +501,25 @@ class Rules {
 
     $value = \trim($value);
 
-    // Validate regex syntax
-    if (@\preg_match($regex, '') === false) {
+    // Strip JS-only flags (g = global, y = sticky) that are invalid in PHP PCRE.
+    // Regex delimiters look like /pattern/flags — strip unsupported flag chars
+    // from the trailing modifier string only.
+    $pcreRegex = \preg_replace_callback(
+      '/^(.)(.*)\1([a-zA-Z]*)$/',
+      function (array $m): string {
+        // $m[3] is the flags string; remove 'g' and 'y'
+        $flags = \str_replace(['g', 'y'], '', $m[3]);
+        return $m[1] . $m[2] . $m[1] . $flags;
+      },
+      $regex
+    ) ?? $regex;
+
+    // Validate PCRE syntax
+    if (@\preg_match($pcreRegex, '') === false) {
       return [false, null, 'Invalid pattern.'];
     }
 
-    if (!\preg_match($regex, $value)) {
+    if (!\preg_match($pcreRegex, $value)) {
       return [false, null, 'Does not match required pattern.'];
     }
 

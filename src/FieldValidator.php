@@ -23,8 +23,13 @@ class FieldValidator {
 
   private string $_field;
   private mixed $_value;
-  private mixed $_sanitized;
+  private mixed $_normalized;
+  /**
+   * @var list<array{rule: callable(mixed): mixed, message: ?string}>
+   */
   private array $_rules = [];
+
+  /** @var array<string, list<string>> */
   private array $_errors = [];
   private bool $_nullable = false;
   private bool $_bail = true; // Stop on first error
@@ -32,7 +37,7 @@ class FieldValidator {
   public function __construct(string $field, mixed $value) {
     $this->_field = $field;
     $this->_value = $value;
-    $this->_sanitized = $value;
+    $this->_normalized = $value;
   }
 
   // =========================================================================
@@ -48,7 +53,9 @@ class FieldValidator {
   }
 
   /**
-   * Continue validation even after errors (default: stop on first).
+   * Configure whether validation stops after the first failed rule.
+   *
+   * true stops on the first error; false collects subsequent rule errors.
    */
   public function bail(bool $bail = true):self {
     $this->_bail = $bail;
@@ -90,6 +97,7 @@ class FieldValidator {
   // String Rules
   // =========================================================================
 
+  /** @param list<string> $restricted */
   public function name(array $restricted = [], int $min = 2, int $max = 35):self {
     $this->_rules[] = [
       'rule' => fn($v) => Rules::name($v, $restricted, $min, $max),
@@ -98,6 +106,10 @@ class FieldValidator {
     return $this;
   }
 
+  /**
+   * @param list<string> $restricted
+   * @param list<string> $allowed_chars
+   */
   public function username(
     int $min = 3,
     int $max = 32,
@@ -171,6 +183,7 @@ class FieldValidator {
     return $this;
   }
 
+  /** @param list<string> $allowed_tags */
   public function html(int $min = 0, int $max = 0, array $allowed_tags = []):self {
     $this->_rules[] = [
       'rule' => fn($v) => Rules::html($v, $min, $max, $allowed_tags),
@@ -319,6 +332,7 @@ class FieldValidator {
   // Choice Rules
   // =========================================================================
 
+  /** @param list<mixed> $options */
   public function in(array $options, bool $strict = true):self {
     $this->_rules[] = [
       'rule' => fn($v) => Rules::in($v, $options, $strict),
@@ -327,10 +341,12 @@ class FieldValidator {
     return $this;
   }
 
+  /** @param list<mixed> $options */
   public function option(array $options, bool $strict = true):self {
     return $this->in($options, $strict);
   }
 
+  /** @param list<mixed> $options */
   public function notIn(array $options, bool $strict = true):self {
     $this->_rules[] = [
       'rule' => fn($v) => Rules::notIn($v, $options, $strict),
@@ -351,6 +367,7 @@ class FieldValidator {
     return $this;
   }
 
+  /** @param list<mixed> $params */
   public function arrayOf(string $rule, array $params = []):self {
     $this->_rules[] = [
       'rule' => fn($v) => Rules::arrayOf($v, $rule, $params),
@@ -371,6 +388,7 @@ class FieldValidator {
     return $this;
   }
 
+  /** @param list<string> $allowed */
   public function fileExtension(array $allowed):self {
     $this->_rules[] = [
       'rule' => fn($v) => Rules::fileExtension($v, $allowed),
@@ -438,7 +456,9 @@ class FieldValidator {
   /**
    * Add a custom validation rule.
    *
-   * @param callable $callback Receives value, returns [bool $valid, mixed $value, ?string $error].
+   * The callback is responsible for returning a safe, value-free error message.
+   *
+   * @param callable(mixed): mixed $callback Receives value, returns [bool $valid, mixed $value, ?string $error].
    */
   public function custom(callable $callback):self {
     $this->_rules[] = [
@@ -462,30 +482,42 @@ class FieldValidator {
     }
 
     $this->_errors = [];
-    $this->_sanitized = $this->_value;
+    $this->_normalized = $this->_value;
 
     foreach ($this->_rules as $ruleData) {
       $rule = $ruleData['rule'];
       $customMessage = $ruleData['message'];
 
-      $result = $rule($this->_sanitized);
+      $result = $rule($this->_normalized);
+
+      if (
+        !\is_array($result)
+        || !\array_is_list($result)
+        || \count($result) !== 3
+        || !\is_bool($result[0])
+        || (!\is_string($result[2]) && $result[2] !== null)
+      ) {
+        throw new \LogicException(
+          "Validation rules for field '{$this->_field}' must return [bool, mixed, string|null]."
+        );
+      }
 
       if (!$result[0]) {
-        $this->_errors[$this->_field][] = $customMessage ?? $result[2];
+        $this->_errors[$this->_field][] = $customMessage ?? $result[2] ?? 'Validation failed.';
 
         if ($this->_bail) {
           break;
         }
       } else {
-        // Update sanitized value
-        $this->_sanitized = $result[1];
+        // Pass the normalized output into the next rule.
+        $this->_normalized = $result[1];
       }
     }
 
     $valid = empty($this->_errors);
     return new ValidationResult(
       $valid,
-      $valid ? $this->_sanitized : null,
+      $valid ? $this->_normalized : null,
       $this->_errors,
       $this->_field
     );

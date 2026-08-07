@@ -18,13 +18,18 @@ namespace TimeFrontiers\Validation;
  * }
  * ```
  */
+/**
+ * @phpstan-type ErrorMap array<string, list<string>>
+ */
 class ValidationResult {
 
   private bool $_valid;
   private mixed $_value;
+  /** @var ErrorMap */
   private array $_errors;
   private string $_field;
 
+  /** @param ErrorMap $errors */
   public function __construct(
     bool $valid,
     mixed $value = null,
@@ -67,7 +72,7 @@ class ValidationResult {
   // =========================================================================
 
   /**
-   * Get the sanitized/validated value.
+   * Get the normalized/validated value.
    *
    * @return mixed The value, or null if validation failed.
    */
@@ -89,7 +94,7 @@ class ValidationResult {
   /**
    * Get all errors.
    *
-   * @return array ['field' => ['message1', 'message2'], ...]
+   * @return ErrorMap
    */
   public function errors():array {
     return $this->_errors;
@@ -98,6 +103,7 @@ class ValidationResult {
   /**
    * Get errors for a specific field.
    */
+  /** @return list<string> */
   public function errorsFor(string $field):array {
     return $this->_errors[$field] ?? [];
   }
@@ -134,6 +140,7 @@ class ValidationResult {
   /**
    * Get all error messages as a flat array.
    */
+  /** @return list<string> */
   public function messages():array {
     $messages = [];
     foreach ($this->_errors as $field => $errs) {
@@ -162,6 +169,7 @@ class ValidationResult {
   /**
    * Convert to array.
    */
+  /** @return array{valid: bool, value: mixed, field: string, errors: ErrorMap} */
   public function toArray():array {
     return [
       'valid'  => $this->_valid,

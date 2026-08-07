@@ -7,10 +7,15 @@ namespace TimeFrontiers\Validation;
 /**
  * Exception thrown when validation fails.
  */
+/**
+ * @phpstan-type ErrorMap array<string, list<string>>
+ */
 class ValidationException extends \Exception {
 
+  /** @var ErrorMap */
   private array $_errors;
 
+  /** @param ErrorMap $errors */
   public function __construct(string $message, array $errors = [], int $code = 422) {
     parent::__construct($message, $code);
     $this->_errors = $errors;
@@ -19,6 +24,7 @@ class ValidationException extends \Exception {
   /**
    * Get all validation errors.
    */
+  /** @return ErrorMap */
   public function errors():array {
     return $this->_errors;
   }
@@ -26,6 +32,7 @@ class ValidationException extends \Exception {
   /**
    * Get errors for a specific field.
    */
+  /** @return list<string> */
   public function errorsFor(string $field):array {
     return $this->_errors[$field] ?? [];
   }

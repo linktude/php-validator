@@ -7,10 +7,60 @@ namespace TimeFrontiers\Validation;
 /**
  * Validation rules.
  *
- * Each method returns [bool $valid, mixed $sanitized_value, ?string $error_message].
- * If valid, error_message is null. If invalid, sanitized_value may be null.
+ * Each method returns [bool $valid, mixed $normalized_value, ?string $error_message].
+ * If valid, error_message is null. If invalid, normalized_value may be null.
+ *
+ * @phpstan-type RuleResult array{bool, mixed, string|null}
  */
 class Rules {
+
+  /** @var array<string, non-empty-string> */
+  private const ARRAY_OF_RULES = [
+    'name' => 'name',
+    'username' => 'username',
+    'email' => 'email',
+    'password' => 'password',
+    'phone' => 'phone',
+    'tel' => 'phone',
+    'url' => 'url',
+    'ip' => 'ip',
+    'text' => 'text',
+    'html' => 'html',
+    'slug' => 'slug',
+    'uuid' => 'uuid',
+    'json' => 'json',
+    'hex' => 'hex',
+    'color' => 'color',
+    'alpha' => 'alpha',
+    'alphanumeric' => 'alphanumeric',
+    'alnum' => 'alphanumeric',
+    'pattern' => 'pattern',
+    'regex' => 'pattern',
+    'integer' => 'integer',
+    'int' => 'integer',
+    'float' => 'float',
+    'decimal' => 'float',
+    'number' => 'float',
+    'boolean' => 'boolean',
+    'bool' => 'boolean',
+    'date' => 'date',
+    'time' => 'time',
+    'datetime' => 'datetime',
+    'in' => 'in',
+    'option' => 'in',
+    'notin' => 'notIn',
+    'not_in' => 'notIn',
+    'array' => 'array',
+    'fileextension' => 'fileExtension',
+    'countrycode' => 'countryCode',
+    'country_code' => 'countryCode',
+    'currencycode' => 'currencyCode',
+    'currency_code' => 'currencyCode',
+    'min' => 'minLength',
+    'max' => 'maxLength',
+    'length' => 'length',
+    'between' => 'lengthBetween',
+  ];
 
   // =========================================================================
   // String Validations
@@ -25,12 +75,18 @@ class Rules {
    * @param int $max_length Maximum length (default: 35).
    * @return array [valid, value, error]
    */
+  /**
+   * @param list<string> $restricted
+   * @return RuleResult
+   */
   public static function name(
     mixed $value,
     array $restricted = [],
     int $min_length = 2,
     int $max_length = 35
   ):array {
+    self::assertLengthRange('name', $min_length, $max_length, false);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -50,6 +106,7 @@ class Rules {
     }
 
     foreach ($restricted as $word) {
+      if ($word === '') continue;
       if (\stripos($value, $word) !== false) {
         return [false, null, 'Contains restricted content.'];
       }
@@ -69,6 +126,11 @@ class Rules {
    * @param array $allowed_chars Extra allowed characters.
    * @return array [valid, value, error]
    */
+  /**
+   * @param list<string> $restricted
+   * @param list<string> $allowed_chars
+   * @return RuleResult
+   */
   public static function username(
     mixed $value,
     int $min_length = 3,
@@ -77,6 +139,16 @@ class Rules {
     string $case = 'UPPER',
     array $allowed_chars = []
   ):array {
+    self::assertLengthRange('username', $min_length, $max_length, false);
+    if (!\in_array(\strtoupper($case), ['UPPER', 'UPPERCASE', 'LOWER', 'LOWERCASE', 'PRESERVE'], true)) {
+      throw ValidationConfigurationException::forRule('', 'username', 'the username case policy is invalid');
+    }
+    foreach ($allowed_chars as $character) {
+      if (\mb_strlen($character) !== 1) {
+        throw ValidationConfigurationException::forRule('', 'username', 'allowed username characters must contain one character each');
+      }
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -86,16 +158,12 @@ class Rules {
     // Build regex
     $regex = '/^[a-zA-Z0-9';
     foreach ($allowed_chars as $char) {
-      $regex .= '\\' . $char;
+      $regex .= \preg_quote($char, '/');
     }
     $regex .= ']+$/';
 
     if (!\preg_match($regex, $value)) {
-      $msg = 'Must contain only letters and numbers';
-      if (!empty($allowed_chars)) {
-        $msg .= ', and: ' . \implode(' ', $allowed_chars);
-      }
-      return [false, null, $msg . '.'];
+      return [false, null, 'Must contain only allowed username characters.'];
     }
 
     $len = \mb_strlen($value);
@@ -107,6 +175,7 @@ class Rules {
     }
 
     foreach ($restricted as $word) {
+      if ($word === '') continue;
       if (\stripos($value, $word) !== false) {
         return [false, null, 'Contains restricted content.'];
       }
@@ -125,6 +194,7 @@ class Rules {
   /**
    * Validate email address.
    */
+  /** @return RuleResult */
   public static function email(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -152,6 +222,7 @@ class Rules {
    * @param bool $require_special Require special character.
    * @return array [valid, value, error]
    */
+  /** @return RuleResult */
   public static function password(
     mixed $value,
     int $min_length = 8,
@@ -161,6 +232,8 @@ class Rules {
     bool $require_number = true,
     bool $require_special = true
   ):array {
+    self::assertLengthRange('password', $min_length, $max_length, false);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -197,12 +270,16 @@ class Rules {
   /**
    * Validate phone number (E.164 format).
    */
+  /** @return RuleResult */
   public static function phone(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
     $value = \preg_replace('/\s+/', '', \trim($value));
+    if ($value === null) {
+      throw new \LogicException('Phone normalization failed.');
+    }
 
     if (!\preg_match('/^\+[1-9]\d{5,14}$/', $value)) {
       return [false, null, 'Invalid phone number. Use E.164 format: +[country code][number].'];
@@ -214,6 +291,7 @@ class Rules {
   /**
    * Alias for phone().
    */
+  /** @return RuleResult */
   public static function tel(mixed $value):array {
     return self::phone($value);
   }
@@ -221,6 +299,7 @@ class Rules {
   /**
    * Validate URL.
    */
+  /** @return RuleResult */
   public static function url(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -230,7 +309,13 @@ class Rules {
     $filtered = \filter_var($value, FILTER_VALIDATE_URL);
 
     if ($filtered === false) {
-      return [false, null, 'Invalid URL. Include protocol (http://, https://, etc.).'];
+      return [false, null, 'Invalid HTTP(S) URL.'];
+    }
+
+    $scheme = \strtolower((string)\parse_url($filtered, PHP_URL_SCHEME));
+    $host = \parse_url($filtered, PHP_URL_HOST);
+    if (!\in_array($scheme, ['http', 'https'], true) || !\is_string($host) || $host === '') {
+      return [false, null, 'Invalid HTTP(S) URL.'];
     }
 
     return [true, $filtered, null];
@@ -242,14 +327,20 @@ class Rules {
    * @param mixed $value
    * @param string $version 'v4', 'v6', or 'any'.
    */
+  /** @return RuleResult */
   public static function ip(mixed $value, string $version = 'any'):array {
+    $normalizedVersion = \strtolower($version);
+    if (!\in_array($normalizedVersion, ['any', 'v4', 'ipv4', 'v6', 'ipv6'], true)) {
+      throw ValidationConfigurationException::forRule('', 'ip', 'the IP version is invalid');
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
     $value = \trim($value);
 
-    $flag = match (\strtolower($version)) {
+    $flag = match ($normalizedVersion) {
       'v4', 'ipv4' => FILTER_FLAG_IPV4,
       'v6', 'ipv6' => FILTER_FLAG_IPV6,
       default => 0,
@@ -267,17 +358,20 @@ class Rules {
   /**
    * Validate plain text with length constraints.
    */
+  /** @return RuleResult */
   public static function text(
     mixed $value,
     int $min_length = 0,
     int $max_length = 0
   ):array {
+    self::assertLengthRange('text', $min_length, $max_length, true);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
     $value = \trim($value);
-    $sanitized = \htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $normalized = \htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
     $len = \mb_strlen($value);
     if ($min_length > 0 && $len < $min_length) {
@@ -287,11 +381,15 @@ class Rules {
       return [false, null, "Must not exceed {$max_length} characters."];
     }
 
-    return [true, $sanitized, null];
+    return [true, $normalized, null];
   }
 
   /**
    * Validate HTML content.
+   */
+  /**
+   * @param list<string> $allowed_tags
+   * @return RuleResult
    */
   public static function html(
     mixed $value,
@@ -299,6 +397,8 @@ class Rules {
     int $max_length = 0,
     array $allowed_tags = []
   ):array {
+    self::assertLengthRange('html', $min_length, $max_length, true);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -324,11 +424,14 @@ class Rules {
   /**
    * Validate slug (URL-friendly string).
    */
+  /** @return RuleResult */
   public static function slug(
     mixed $value,
     int $min_length = 1,
     int $max_length = 128
   ):array {
+    self::assertLengthRange('slug', $min_length, $max_length, false);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -353,6 +456,7 @@ class Rules {
   /**
    * Validate UUID (v4).
    */
+  /** @return RuleResult */
   public static function uuid(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -371,6 +475,7 @@ class Rules {
   /**
    * Validate JSON string.
    */
+  /** @return RuleResult */
   public static function json(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -389,7 +494,12 @@ class Rules {
   /**
    * Validate hex string.
    */
+  /** @return RuleResult */
   public static function hex(mixed $value, int $length = 0):array {
+    if ($length < 0) {
+      throw ValidationConfigurationException::forRule('', 'hex', 'the length cannot be negative');
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -410,6 +520,7 @@ class Rules {
   /**
    * Validate hex color code.
    */
+  /** @return RuleResult */
   public static function color(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -432,11 +543,14 @@ class Rules {
   /**
    * Validate alphabetic string.
    */
+  /** @return RuleResult */
   public static function alpha(
     mixed $value,
     int $min_length = 0,
     int $max_length = 0
   ):array {
+    self::assertLengthRange('alpha', $min_length, $max_length, true);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -461,11 +575,14 @@ class Rules {
   /**
    * Validate alphanumeric string.
    */
+  /** @return RuleResult */
   public static function alphanumeric(
     mixed $value,
     int $min_length = 0,
     int $max_length = 0
   ):array {
+    self::assertLengthRange('alphanumeric', $min_length, $max_length, true);
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
@@ -490,34 +607,22 @@ class Rules {
   /**
    * Validate against regex pattern.
    *
-   * Accepts PCRE patterns (e.g. /^[a-z]+$/i).
-   * JS-only flags (g, y) are silently stripped before evaluation —
-   * they have no PCRE equivalent and are commonly pasted from JS regex testers.
+   * Accepts a complete delimited PCRE pattern (for example /^[a-z]+$/i).
+   * JavaScript-only trailing g and y modifiers are removed for compatibility.
    */
+  /** @return RuleResult */
   public static function pattern(mixed $value, string $regex):array {
+    $compiled = (new RuleParser())->parse([['pattern', $regex]]);
+    $pcreRegex = $compiled[0]['params'][0];
+    if (!\is_string($pcreRegex)) {
+      throw new \LogicException('The pattern compiler returned an invalid rule specification.');
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
     $value = \trim($value);
-
-    // Strip JS-only flags (g = global, y = sticky) that are invalid in PHP PCRE.
-    // Regex delimiters look like /pattern/flags — strip unsupported flag chars
-    // from the trailing modifier string only.
-    $pcreRegex = \preg_replace_callback(
-      '/^(.)(.*)\1([a-zA-Z]*)$/',
-      function (array $m): string {
-        // $m[3] is the flags string; remove 'g' and 'y'
-        $flags = \str_replace(['g', 'y'], '', $m[3]);
-        return $m[1] . $m[2] . $m[1] . $flags;
-      },
-      $regex
-    ) ?? $regex;
-
-    // Validate PCRE syntax
-    if (@\preg_match($pcreRegex, '') === false) {
-      return [false, null, 'Invalid pattern.'];
-    }
 
     if (!\preg_match($pcreRegex, $value)) {
       return [false, null, 'Does not match required pattern.'];
@@ -533,11 +638,14 @@ class Rules {
   /**
    * Validate integer.
    */
+  /** @return RuleResult */
   public static function integer(
     mixed $value,
     ?int $min = null,
     ?int $max = null
   ):array {
+    self::assertNumericBounds('integer', $min, $max);
+
     $filtered = \filter_var($value, FILTER_VALIDATE_INT);
 
     if ($filtered === false) {
@@ -557,6 +665,7 @@ class Rules {
   /**
    * Alias for integer().
    */
+  /** @return RuleResult */
   public static function int(mixed $value, ?int $min = null, ?int $max = null):array {
     return self::integer($value, $min, $max);
   }
@@ -564,11 +673,14 @@ class Rules {
   /**
    * Validate float/decimal.
    */
+  /** @return RuleResult */
   public static function float(
     mixed $value,
     ?float $min = null,
     ?float $max = null
   ):array {
+    self::assertNumericBounds('float', $min, $max);
+
     $filtered = \filter_var($value, FILTER_VALIDATE_FLOAT);
 
     if ($filtered === false) {
@@ -588,6 +700,7 @@ class Rules {
   /**
    * Alias for float().
    */
+  /** @return RuleResult */
   public static function decimal(mixed $value, ?float $min = null, ?float $max = null):array {
     return self::float($value, $min, $max);
   }
@@ -595,6 +708,7 @@ class Rules {
   /**
    * Validate boolean.
    */
+  /** @return RuleResult */
   public static function boolean(mixed $value):array {
     if (\is_bool($value)) {
       return [true, $value, null];
@@ -620,6 +734,7 @@ class Rules {
   /**
    * Alias for boolean().
    */
+  /** @return RuleResult */
   public static function bool(mixed $value):array {
     return self::boolean($value);
   }
@@ -637,47 +752,41 @@ class Rules {
    * @param string|null $max Maximum date.
    * @return array [valid, value, error]
    */
+  /** @return RuleResult */
   public static function date(
     mixed $value,
     string $format = 'Y-m-d',
     ?string $min = null,
     ?string $max = null
   ):array {
+    if ($format === '') {
+      throw ValidationConfigurationException::forRule('', 'date', 'the date format cannot be empty');
+    }
+
+    $minDate = $min !== null ? self::configuredDate($min, $format, 'date') : null;
+    $maxDate = $max !== null ? self::configuredDate($max, $format, 'date') : null;
+    if ($minDate !== null && $maxDate !== null && $minDate > $maxDate) {
+      throw ValidationConfigurationException::forRule('', 'date', 'the minimum date cannot exceed the maximum date');
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
     $value = \trim($value);
-
-    // Try to parse with DateTime
-    $parsed = \DateTime::createFromFormat($format, $value);
-    if (!$parsed || $parsed->format($format) !== $value) {
-      // Try flexible parsing
-      try {
-        $parsed = new \DateTime($value);
-      } catch (\Exception $e) {
-        return [false, null, 'Invalid date.'];
-      }
+    $parsed = self::exactDate($value, $format);
+    if ($parsed === null) {
+      return [false, null, 'Invalid date.'];
     }
 
-    $result = $parsed->format('Y-m-d');
-    $timestamp = $parsed->getTimestamp();
-
-    if ($min !== null) {
-      $minTime = \strtotime($min);
-      if ($minTime && $timestamp < $minTime) {
-        return [false, null, "Date must be on or after {$min}."];
-      }
+    if ($minDate !== null && $parsed < $minDate) {
+      return [false, null, "Date must be on or after {$min}."];
+    }
+    if ($maxDate !== null && $parsed > $maxDate) {
+      return [false, null, "Date must be on or before {$max}."];
     }
 
-    if ($max !== null) {
-      $maxTime = \strtotime($max);
-      if ($maxTime && $timestamp > $maxTime) {
-        return [false, null, "Date must be on or before {$max}."];
-      }
-    }
-
-    return [true, $result, null];
+    return [true, $parsed->format('Y-m-d'), null];
   }
 
   /**
@@ -688,50 +797,31 @@ class Rules {
    * @param string|null $max Maximum time (HH:MM:SS).
    * @return array [valid, value, error]
    */
+  /** @return RuleResult */
   public static function time(
     mixed $value,
     ?string $min = null,
     ?string $max = null
   ):array {
+    $minTime = $min !== null ? self::configuredTime($min, 'time') : null;
+    $maxTime = $max !== null ? self::configuredTime($max, 'time') : null;
+    if ($minTime !== null && $maxTime !== null && $minTime > $maxTime) {
+      throw ValidationConfigurationException::forRule('', 'time', 'the minimum time cannot exceed the maximum time');
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
-    $value = \trim($value);
-
-    // Parse time
-    $isPM = \stripos($value, 'pm') !== false;
-    $isAM = \stripos($value, 'am') !== false;
-    $value = \preg_replace('/[^0-9:]/', '', $value);
-
-    \preg_match_all('/\d+/', $value, $matches);
-    $parts = $matches[0] ?? [];
-
-    if (empty($parts)) {
+    $result = self::exactTime(\trim($value));
+    if ($result === null) {
       return [false, null, 'Invalid time format.'];
     }
 
-    $hour = (int)($parts[0] ?? 0);
-    $minute = (int)($parts[1] ?? 0);
-    $second = (int)($parts[2] ?? 0);
-
-    // Convert 12-hour to 24-hour
-    if ($isPM && $hour < 12) {
-      $hour += 12;
-    } elseif ($isAM && $hour === 12) {
-      $hour = 0;
-    }
-
-    if ($hour > 23 || $minute > 59 || $second > 59) {
-      return [false, null, 'Invalid time.'];
-    }
-
-    $result = \sprintf('%02d:%02d:%02d', $hour, $minute, $second);
-
-    if ($min !== null && $result < $min) {
+    if ($minTime !== null && $result < $minTime) {
       return [false, null, "Time must be at or after {$min}."];
     }
-    if ($max !== null && $result > $max) {
+    if ($maxTime !== null && $result > $maxTime) {
       return [false, null, "Time must be at or before {$max}."];
     }
 
@@ -746,41 +836,35 @@ class Rules {
    * @param string|null $max Maximum datetime.
    * @return array [valid, value, error]
    */
+  /** @return RuleResult */
   public static function datetime(
     mixed $value,
     ?string $min = null,
     ?string $max = null
   ):array {
+    $format = 'Y-m-d H:i:s';
+    $minDate = $min !== null ? self::configuredDate($min, $format, 'datetime') : null;
+    $maxDate = $max !== null ? self::configuredDate($max, $format, 'datetime') : null;
+    if ($minDate !== null && $maxDate !== null && $minDate > $maxDate) {
+      throw ValidationConfigurationException::forRule('', 'datetime', 'the minimum datetime cannot exceed the maximum datetime');
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
-    $value = \trim($value);
-
-    try {
-      $parsed = new \DateTime($value);
-    } catch (\Exception $e) {
+    $parsed = self::exactDate(\trim($value), $format);
+    if ($parsed === null) {
       return [false, null, 'Invalid datetime.'];
     }
-
-    $result = $parsed->format('Y-m-d H:i:s');
-    $timestamp = $parsed->getTimestamp();
-
-    if ($min !== null) {
-      $minTime = \strtotime($min);
-      if ($minTime && $timestamp < $minTime) {
-        return [false, null, "Datetime must be on or after {$min}."];
-      }
+    if ($minDate !== null && $parsed < $minDate) {
+      return [false, null, "Datetime must be on or after {$min}."];
+    }
+    if ($maxDate !== null && $parsed > $maxDate) {
+      return [false, null, "Datetime must be on or before {$max}."];
     }
 
-    if ($max !== null) {
-      $maxTime = \strtotime($max);
-      if ($maxTime && $timestamp > $maxTime) {
-        return [false, null, "Datetime must be on or before {$max}."];
-      }
-    }
-
-    return [true, $result, null];
+    return [true, $parsed->format($format), null];
   }
 
   // =========================================================================
@@ -790,9 +874,13 @@ class Rules {
   /**
    * Validate value is in a set of options.
    */
+  /**
+   * @param list<mixed> $options
+   * @return RuleResult
+   */
   public static function in(mixed $value, array $options, bool $strict = true):array {
     if (!\in_array($value, $options, $strict)) {
-      return [false, null, 'Invalid option. Must be one of: ' . \implode(', ', $options) . '.'];
+      return [false, null, 'Invalid option.'];
     }
     return [true, $value, null];
   }
@@ -800,12 +888,20 @@ class Rules {
   /**
    * Alias for in().
    */
+  /**
+   * @param list<mixed> $options
+   * @return RuleResult
+   */
   public static function option(mixed $value, array $options, bool $strict = true):array {
     return self::in($value, $options, $strict);
   }
 
   /**
    * Validate value is NOT in a set.
+   */
+  /**
+   * @param list<mixed> $options
+   * @return RuleResult
    */
   public static function notIn(mixed $value, array $options, bool $strict = true):array {
     if (\in_array($value, $options, $strict)) {
@@ -821,11 +917,14 @@ class Rules {
   /**
    * Validate array.
    */
+  /** @return RuleResult */
   public static function array(
     mixed $value,
     int $min_count = 0,
     int $max_count = 0
   ):array {
+    self::assertLengthRange('array', $min_count, $max_count, true);
+
     if (!\is_array($value)) {
       return [false, null, 'Must be an array.'];
     }
@@ -844,6 +943,10 @@ class Rules {
   /**
    * Validate each array item.
    */
+  /**
+   * @param list<mixed> $rule_params
+   * @return RuleResult
+   */
   public static function arrayOf(
     mixed $value,
     string $rule,
@@ -853,15 +956,34 @@ class Rules {
       return [false, null, 'Must be an array.'];
     }
 
-    if (!\method_exists(self::class, $rule)) {
-      return [false, null, "Unknown validation rule: {$rule}."];
+    $method = self::ARRAY_OF_RULES[\strtolower($rule)] ?? null;
+    if ($method === null) {
+      throw ValidationConfigurationException::forRule('', 'arrayOf', 'the configured item rule is not allowed');
     }
 
     $validated = [];
+    $reflection = new \ReflectionMethod(self::class, $method);
     foreach ($value as $index => $item) {
-      $result = self::$rule($item, ...$rule_params);
+      try {
+        $result = $reflection->invokeArgs(null, [$item, ...$rule_params]);
+      } catch (\TypeError $exception) {
+        throw new ValidationConfigurationException(
+          "Invalid validation rule 'arrayOf': the item-rule parameters do not match its signature.",
+          0,
+          $exception
+        );
+      }
+      if (
+        !\is_array($result)
+        || !\array_is_list($result)
+        || \count($result) !== 3
+        || !\is_bool($result[0])
+        || (!\is_string($result[2]) && $result[2] !== null)
+      ) {
+        throw new \LogicException('An array item rule returned an invalid validation tuple.');
+      }
       if (!$result[0]) {
-        return [false, null, "Item {$index}: {$result[2]}"];
+        return [false, null, 'An array item is invalid: ' . ($result[2] ?? 'Validation failed.')];
       }
       $validated[$index] = $result[1];
     }
@@ -876,12 +998,16 @@ class Rules {
   /**
    * Validate credit card number (Luhn algorithm).
    */
+  /** @return RuleResult */
   public static function creditcard(mixed $value):array {
     if (!\is_string($value) && !\is_int($value)) {
       return [false, null, 'Must be a string or number.'];
     }
 
     $number = \preg_replace('/\D/', '', (string)$value);
+    if ($number === null) {
+      throw new \LogicException('Card-number normalization failed.');
+    }
 
     if (\strlen($number) < 13 || \strlen($number) > 19) {
       return [false, null, 'Invalid card number length.'];
@@ -913,24 +1039,38 @@ class Rules {
   /**
    * Validate file extension.
    */
+  /**
+   * @param list<mixed> $allowed
+   * @return RuleResult
+   */
   public static function fileExtension(mixed $value, array $allowed):array {
+    if ($allowed === []) {
+      throw ValidationConfigurationException::forRule('', 'fileExtension', 'at least one allowed suffix is required');
+    }
+    $normalizedAllowed = [];
+    foreach ($allowed as $extension) {
+      if (!\is_string($extension) || $extension === '') {
+        throw ValidationConfigurationException::forRule('', 'fileExtension', 'allowed suffixes must be non-empty strings');
+      }
+      $normalizedAllowed[] = \strtolower($extension);
+    }
+
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
     }
 
     $ext = \strtolower(\pathinfo($value, PATHINFO_EXTENSION));
-    $allowed = \array_map('strtolower', $allowed);
-
-    if (!\in_array($ext, $allowed, true)) {
-      return [false, null, 'Invalid file type. Allowed: ' . \implode(', ', $allowed) . '.'];
+    if (!\in_array($ext, $normalizedAllowed, true)) {
+      return [false, null, 'Invalid filename extension.'];
     }
 
     return [true, $value, null];
   }
 
   /**
-   * Validate country code (ISO 3166-1 alpha-2).
+   * Normalize a two-letter country-code-shaped value.
    */
+  /** @return RuleResult */
   public static function countryCode(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -939,15 +1079,16 @@ class Rules {
     $value = \strtoupper(\trim($value));
 
     if (!\preg_match('/^[A-Z]{2}$/', $value)) {
-      return [false, null, 'Invalid country code. Use ISO 3166-1 alpha-2 format (e.g., US, GB, NG).'];
+      return [false, null, 'Must use a two-letter country code format.'];
     }
 
     return [true, $value, null];
   }
 
   /**
-   * Validate currency code (ISO 4217).
+   * Normalize a three-letter currency-code-shaped value.
    */
+  /** @return RuleResult */
   public static function currencyCode(mixed $value):array {
     if (!\is_string($value)) {
       return [false, null, 'Must be a string.'];
@@ -956,7 +1097,7 @@ class Rules {
     $value = \strtoupper(\trim($value));
 
     if (!\preg_match('/^[A-Z]{3}$/', $value)) {
-      return [false, null, 'Invalid currency code. Use ISO 4217 format (e.g., USD, EUR, NGN).'];
+      return [false, null, 'Must use a three-letter currency code format.'];
     }
 
     return [true, $value, null];
@@ -969,8 +1110,16 @@ class Rules {
   /**
    * Validate minimum length.
    */
+  /** @return RuleResult */
   public static function minLength(mixed $value, int $min):array {
-    $length = \is_array($value) ? \count($value) : \mb_strlen((string)$value);
+    if ($min < 0) {
+      throw ValidationConfigurationException::forRule('', 'min', 'the length cannot be negative');
+    }
+
+    $length = self::valueLength($value);
+    if ($length === null) {
+      return [false, null, 'Must be a scalar, stringable object, or array.'];
+    }
 
     if ($length < $min) {
       return [false, null, "Must be at least {$min} characters."];
@@ -982,8 +1131,16 @@ class Rules {
   /**
    * Validate maximum length.
    */
+  /** @return RuleResult */
   public static function maxLength(mixed $value, int $max):array {
-    $length = \is_array($value) ? \count($value) : \mb_strlen((string)$value);
+    if ($max < 0) {
+      throw ValidationConfigurationException::forRule('', 'max', 'the length cannot be negative');
+    }
+
+    $length = self::valueLength($value);
+    if ($length === null) {
+      return [false, null, 'Must be a scalar, stringable object, or array.'];
+    }
 
     if ($length > $max) {
       return [false, null, "Must not exceed {$max} characters."];
@@ -995,8 +1152,16 @@ class Rules {
   /**
    * Validate exact length.
    */
+  /** @return RuleResult */
   public static function length(mixed $value, int $length):array {
-    $actual = \is_array($value) ? \count($value) : \mb_strlen((string)$value);
+    if ($length < 0) {
+      throw ValidationConfigurationException::forRule('', 'length', 'the length cannot be negative');
+    }
+
+    $actual = self::valueLength($value);
+    if ($actual === null) {
+      return [false, null, 'Must be a scalar, stringable object, or array.'];
+    }
 
     if ($actual !== $length) {
       return [false, null, "Must be exactly {$length} characters."];
@@ -1008,13 +1173,110 @@ class Rules {
   /**
    * Validate length between min and max.
    */
+  /** @return RuleResult */
   public static function lengthBetween(mixed $value, int $min, int $max):array {
-    $length = \is_array($value) ? \count($value) : \mb_strlen((string)$value);
+    self::assertLengthRange('between', $min, $max, false);
+
+    $length = self::valueLength($value);
+    if ($length === null) {
+      return [false, null, 'Must be a scalar, stringable object, or array.'];
+    }
 
     if ($length < $min || $length > $max) {
       return [false, null, "Must be between {$min} and {$max} characters."];
     }
 
     return [true, $value, null];
+  }
+
+  private static function exactDate(string $value, string $format):?\DateTimeImmutable {
+    $date = \DateTimeImmutable::createFromFormat('!' . $format, $value);
+    $errors = \DateTimeImmutable::getLastErrors();
+    if (
+      $date === false
+      || (\is_array($errors) && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+      || $date->format($format) !== $value
+    ) {
+      return null;
+    }
+
+    return $date;
+  }
+
+  private static function configuredDate(string $value, string $format, string $rule):\DateTimeImmutable {
+    $date = self::exactDate($value, $format);
+    if ($date === null) {
+      throw ValidationConfigurationException::forRule('', $rule, 'a configured bound is invalid');
+    }
+
+    return $date;
+  }
+
+  private static function exactTime(string $value):?string {
+    foreach (['!H:i:s', '!H:i', '!g:i:s a', '!g:i a'] as $format) {
+      $candidate = \str_contains($format, ' a') ? \strtolower($value) : $value;
+      $time = \DateTimeImmutable::createFromFormat($format, $candidate);
+      $errors = \DateTimeImmutable::getLastErrors();
+      if (
+        $time !== false
+        && (!\is_array($errors) || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))
+        && $time->format(\substr($format, 1)) === $candidate
+      ) {
+        return $time->format('H:i:s');
+      }
+    }
+
+    return null;
+  }
+
+  private static function configuredTime(string $value, string $rule):string {
+    $time = self::exactTime($value);
+    if ($time === null) {
+      throw ValidationConfigurationException::forRule('', $rule, 'a configured bound is invalid');
+    }
+
+    return $time;
+  }
+
+  private static function valueLength(mixed $value):?int {
+    if (\is_array($value)) {
+      return \count($value);
+    }
+    if (\is_string($value)) {
+      return \mb_strlen($value);
+    }
+    if (\is_int($value) || \is_float($value) || \is_bool($value)) {
+      return \mb_strlen((string)$value);
+    }
+    if ($value instanceof \Stringable) {
+      return \mb_strlen((string)$value);
+    }
+
+    return null;
+  }
+
+  private static function assertLengthRange(string $rule, int $minimum, int $maximum, bool $zeroMaximumIsUnbounded):void {
+    if ($minimum < 0 || $maximum < 0) {
+      throw ValidationConfigurationException::forRule('', $rule, 'length and count parameters cannot be negative');
+    }
+    if ($minimum > $maximum && !($zeroMaximumIsUnbounded && $maximum === 0)) {
+      throw ValidationConfigurationException::forRule('', $rule, 'the minimum cannot exceed the maximum');
+    }
+  }
+
+  private static function assertNumericBounds(
+    string $rule,
+    int|float|null $minimum,
+    int|float|null $maximum
+  ):void {
+    if (
+      (\is_float($minimum) && !\is_finite($minimum))
+      || (\is_float($maximum) && !\is_finite($maximum))
+    ) {
+      throw ValidationConfigurationException::forRule('', $rule, 'numeric bounds must be finite');
+    }
+    if ($minimum !== null && $maximum !== null && $minimum > $maximum) {
+      throw ValidationConfigurationException::forRule('', $rule, 'the minimum cannot exceed the maximum');
+    }
   }
 }

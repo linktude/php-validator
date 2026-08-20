@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.2 - 2026-08-14
+
+### Fixed
+
+- `RuleParser::toStringList()` and `Validator::_stringListParam()` build their
+  narrowed `list<string>` by construction instead of relying on flow analysis
+  to prove the element type after a validating loop. PHPStan 2.2.8 could infer
+  it; PHPStan 2.2.0 could not, so the CI job that resolves the **lowest**
+  allowed dependencies failed `composer check` while a local run against the
+  newest 2.2.x passed. No runtime behaviour changes — both methods validated
+  their input before and still do.
+
 ## 1.1.1 - 2026-08-14
 
 ### Requirements

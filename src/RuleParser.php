@@ -645,12 +645,17 @@ class RuleParser {
     if (!\is_array($value) || !\array_is_list($value)) {
       throw ValidationConfigurationException::forRule($field, $rule, 'an array parameter must be a list of strings');
     }
+    // Build the narrowed list by construction. Proving the element type
+    // through flow analysis alone depends on the analyser version.
+    $strings = [];
     foreach ($value as $entry) {
       if (!\is_string($entry)) {
         throw ValidationConfigurationException::forRule($field, $rule, 'an array parameter must be a list of strings');
       }
+      $strings[] = $entry;
     }
-    return $value;
+
+    return $strings;
   }
 
   private function isPatternAlias(string $name):bool {

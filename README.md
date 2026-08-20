@@ -7,7 +7,7 @@ Domain objects must still enforce their own invariants. This package does not pe
 ## Installation
 
 ```bash
-composer require timefrontiers/php-validator:^1.1.1
+composer require timefrontiers/php-validator:^1.1.2
 ```
 
 The package requires PHP 8.5 or later and `ext-mbstring`.

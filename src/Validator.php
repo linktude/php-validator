@@ -275,9 +275,14 @@ class Validator {
     if (!\is_array($value) || !\array_is_list($value)) {
       throw new \LogicException('A compiled string-list parameter is invalid.');
     }
+    // Build the narrowed list by construction. Proving the element type
+    // through flow analysis alone depends on the analyser version.
+    $strings = [];
     foreach ($value as $entry) {
       if (!\is_string($entry)) throw new \LogicException('A compiled string-list parameter is invalid.');
+      $strings[] = $entry;
     }
-    return $value;
+
+    return $strings;
   }
 }

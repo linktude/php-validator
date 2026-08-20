@@ -961,8 +961,30 @@ class Rules {
       throw ValidationConfigurationException::forRule('', 'arrayOf', 'the configured item rule is not allowed');
     }
 
-    $validated = [];
     $reflection = new \ReflectionMethod(self::class, $method);
+    // The item rule's own value parameter is supplied by this loop, so the
+    // caller may configure the remaining ones only. PHP accepts surplus
+    // arguments to a userland method without raising TypeError, so an
+    // over-supplied parameter would otherwise be discarded in silence and the
+    // configured constraint would never apply.
+    $accepted = $reflection->getNumberOfParameters() - 1;
+    $required = $reflection->getNumberOfRequiredParameters() - 1;
+    if (\count($rule_params) > $accepted) {
+      throw ValidationConfigurationException::forRule(
+        '',
+        'arrayOf',
+        "the item rule accepts at most {$accepted} parameters"
+      );
+    }
+    if (\count($rule_params) < $required) {
+      throw ValidationConfigurationException::forRule(
+        '',
+        'arrayOf',
+        "the item rule requires at least {$required} parameters"
+      );
+    }
+
+    $validated = [];
     foreach ($value as $index => $item) {
       try {
         $result = $reflection->invokeArgs(null, [$item, ...$rule_params]);

@@ -53,6 +53,24 @@ class RulesSecurityTest extends TestCase {
     Rules::arrayOf([['a@example.com']], 'arrayOf', ['email']);
   }
 
+  public function testArrayOfRejectsItemRuleParameterArityMismatch():void {
+    // PHP accepts surplus arguments to a userland method without raising
+    // TypeError, so an over-supplied parameter must be rejected explicitly or
+    // the configured constraint is discarded in silence.
+    try {
+      Rules::arrayOf(['a@example.com'], 'email', [999]);
+      self::fail('A surplus item-rule parameter must be rejected.');
+    } catch (ValidationConfigurationException $exception) {
+      self::assertStringContainsString('at most', $exception->getMessage());
+    }
+
+    // Correctly parameterised and partially parameterised item rules still work.
+    self::assertFalse(Rules::arrayOf([5], 'int', [100, 200])[0]);
+    self::assertTrue(Rules::arrayOf([150], 'int', [100, 200])[0]);
+    self::assertTrue(Rules::arrayOf([150], 'int', [100])[0]);
+    self::assertTrue(Rules::arrayOf(['a@example.com'], 'email')[0]);
+  }
+
   public function testArrayOfFailureDoesNotExposeSubmittedArrayKeys():void {
     $result = Rules::arrayOf(['private-token-key' => 'invalid'], 'email');
     self::assertFalse($result[0]);

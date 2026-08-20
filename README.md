@@ -1,16 +1,21 @@
 # TimeFrontiers PHP Validator
 
-Request and configuration-boundary validation for PHP 8.1 and later. The package provides a fluent single-field API and deterministic bulk validation while keeping error maps stable and value-free.
+Request and configuration-boundary validation for PHP 8.5 and later. The package provides a fluent single-field API and deterministic bulk validation while keeping error maps stable and value-free.
 
 Domain objects must still enforce their own invariants. This package does not perform database integrity checks, payment authorization, HTML purification, upload inspection, or output-context encoding.
 
 ## Installation
 
 ```bash
-composer require timefrontiers/php-validator:^1.1
+composer require timefrontiers/php-validator:^1.1.1
 ```
 
-The package requires PHP 8.1 or later and `ext-mbstring`.
+The package requires PHP 8.5 or later and `ext-mbstring`.
+
+> **Required action in 1.1.1.** The minimum PHP version moved from 8.1 to
+> 8.5. Despite the patch number this release is **not installable on PHP
+> 8.1-8.4**. Confirm the runtime before upgrading; a consumer that cannot
+> move to PHP 8.5 must pin `1.1.0` explicitly rather than `^1.1`.
 
 ## Entry points and result types
 
@@ -261,6 +266,7 @@ The package never performs HTML output encoding for a specific sink, SQL escapin
 
 The valid fluent API, `Validator::make()`, `Validator::validate()`, result methods, custom field messages, error maps, and dotted lookup remain compatible. Review these deliberate corrections:
 
+0. **PHP 8.5 is required from 1.1.1.** `1.1.0` accepted PHP 8.1 and later; `1.1.1` does not. This is the one change that can stop an upgrade outright.
 1. Unknown rules now throw instead of being skipped.
 2. Flat parameter arrays must become nested tuples.
 3. Bulk access is `validated()` and `get()`; stale `values()` and `value($field)` examples never represented the source API.
@@ -281,7 +287,7 @@ composer check
 composer audit
 ```
 
-The package does not commit a Composer lock file. Release verification must include a clean dependency resolution, PHPUnit on PHP 8.1 and the current supported runtime, PHPStan level max, syntax lint, and Composer audit.
+The package does not commit a Composer lock file. Release verification must include a clean dependency resolution, PHPUnit on PHP 8.5 with lowest and current dependencies, PHPStan level max, syntax lint, and Composer audit.
 
 ## License
 
